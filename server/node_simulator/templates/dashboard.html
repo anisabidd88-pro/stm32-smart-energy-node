@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Energy Node Dashboard (Simulator)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; margin: 20px; }
+    .card { border: 1px solid #ddd; padding: 12px; border-radius: 6px; margin-bottom: 12px; }
+    .row { display:flex; gap:12px; }
+    .col { flex:1; }
+  </style>
+</head>
+<body>
+  <h2>STM32 Smart Energy Node — Simulator</h2>
+  <div class="row">
+    <div class="col card">
+      <h3>Live telemetry</h3>
+      <ul id="telemetry">
+      </ul>
+    </div>
+    <div class="col card">
+      <h3>OTA (AES-256)</h3>
+      <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" id="firmwareFile" name="firmware" /><br><br>
+        <button type="button" onclick="upload()">Upload & Encrypt (to server)</button>
+        <button type="button" onclick="apply()">Apply (simulated)</button>
+      </form>
+      <div id="otaResult"></div>
+    </div>
+  </div>
+  <div class="card">
+    <canvas id="chart" height="100"></canvas>
+  </div>
+<script>
+let chart;
+async function fetchTelemetry(){
+  const resp = await fetch('/api/telemetry');
+  const j = await resp.json();
+  document.getElementById('telemetry').innerHTML = `
+    <li>Voltage: ${j.voltage} V</li>
+    <li>Current: ${j.current} A</li>
+    <li>Active Power: ${j.active_power} W</li>
+    <li>Reactive Power: ${j.reactive_power} VAR</li>
+    <li>Power Factor: ${j.pf}</li>
+    <li>Frequency: ${j.frequency} Hz</li>
+    <li>Timestamp: ${new Date(j.timestamp*1000).toLocaleString()}</li>
+  `;
+  return j;
+}
+
+async function updateChart(){
+  const t = await fetchTelemetry();
+  let data = chart.data;
+  let label = new Date().toLocaleTimeString();
+  data.labels.push(label);
+  data.datasets[0].data.push(t.voltage);
+  data.datasets[1].data.push(t.current);
+  if(data.labels.length>40){ data.labels.shift(); data.datasets.forEach(ds=>ds.data.shift()); }
+  chart.update();
+}
+
+function upload(){
+  const fileInput = document.getElementById('firmwareFile');
+  if(!fileInput.files.length){ alert('Select a file first'); return; }
+  const f = fileInput.files[0];
+  const fd = new FormData();
+  fd.append('firmware', f);
+  fetch('/ota/upload', { method:'POST', body: fd })
+    .then(r=>r.text()).then(t=>{ document.getElementById('otaResult').innerText = t; })
+    .catch(e=>{ document.getElementById('otaResult').innerText = e; });
+}
+
+function apply(){
+  fetch('/ota/apply', { method:'POST' })
+    .then(r=>r.text()).then(t=>{ document.getElementById('otaResult').innerText = t; })
+    .catch(e=>{ document.getElementById('otaResult').innerText = e; });
+}
+
+window.onload = function(){
+  const ctx = document.getElementById('chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: [], datasets: [
+      { label: 'Voltage (V)', data: [], fill:false, borderWidth:1 },
+      { label: 'Current (A)', data: [], fill:false, borderWidth:1 }
+    ]},
+    options: { animation:false, maintainAspectRatio:false }
+  });
+  setInterval(updateChart, 1500);
+};
+</script>
+</body>
+</html>

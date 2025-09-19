@@ -1,0 +1,6 @@
+
+flask>=2.0
+pymodbus==2.5.3
+pycryptodome>=3.16.0
+numpy
+requests
